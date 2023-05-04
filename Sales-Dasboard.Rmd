@@ -1,0 +1,376 @@
+---
+title: "Sales Dashboard"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: fill
+    social: [ "twitter", "facebook", "menu"]
+    source_code: embed
+    theme: cerulean # Change the theme to "flatly"
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(knitr)
+library(DT)
+library(ggplot2)
+library(rpivotTable)
+library(plotly)
+library(dplyr)
+library(highcharter)
+library(openintro)
+library(scales)
+
+```
+```{r}
+data<-read.csv('sales.csv')
+data2<-read.csv('time.csv')
+data$ORDERDATE <- as.Date(data$ORDERDATE, format = "%m/%d/%Y")
+data$YEAR_ID <- as.character(data$YEAR_ID)
+```
+
+
+```{r}
+mycolors <- c("blue", "#FFC125", "darkgreen", "darkorange")
+```
+
+Orders Page
+==============================================
+Row
+-----------------------------------------------------------------------
+
+### Total Number of Orders
+```{r}
+valueBox(length(data$ORDERNUMBER),
+         icon = "fa-user")
+```
+
+### Number of Larger Orders
+
+```{r}
+valueBox(sum(data$DEALSIZE=="Large"),
+         icon = 'fa-building')
+```
+
+### Number of Medium Orders
+
+```{r}
+valueBox(sum(data$DEALSIZE=="Medium"),
+         icon = 'fa-building')
+```
+
+### Number of Small Orders
+
+```{r}
+valueBox(sum(data$DEALSIZE=="Small"),
+         icon = 'fa-building')
+```
+Row
+-------------------------------
+### Orders by Year
+```{r}
+
+p1 <- data %>%
+         group_by(YEAR_ID) %>%
+         summarise(count = n()) %>%
+         plot_ly(x = ~YEAR_ID,
+                 y = ~count,
+                 type = 'bar',
+                 marker = list(color = 'blue')) %>%
+         layout(xaxis = list(title = ""),
+                yaxis = list(title = 'Count'))
+p1
+```
+### Orders by Status
+
+```{r}
+p2 <- data %>%
+         group_by(STATUS) %>%
+         summarise(count = n()) %>%
+         filter(count>50) %>%
+         plot_ly(labels = ~STATUS,
+                 values = ~count,
+                 marker = list(colors = mycolors)) %>%
+         add_pie(hole = 0.5) %>%
+         layout(xaxis = list(zeroline = F,
+                             showline = F,
+                             showticklabels = F,
+                             showgrid = F),
+                yaxis = list(zeroline = F,
+                             showline = F,
+                             showticklabels=F,
+                            showgrid=F))
+p2 
+```
+### Orders by Product Line
+```{r}
+p3 <- data %>%
+         group_by(PRODUCTLINE) %>%
+         summarise(count = n()) %>%
+         plot_ly(x = ~PRODUCTLINE,
+                 y = ~count,
+                 type = 'bar',
+                 marker = list(color = 'blue')) %>%
+         layout(xaxis = list(title = ""),
+                yaxis = list(title = 'Count'))
+p3
+```
+
+
+### Sales by Territoy
+
+```{r}
+p4 <- data %>%
+  filter(!is.na(TERRITORY)) %>%
+  group_by(TERRITORY) %>%
+  summarise(count = n()) %>%
+  filter(count > 50) %>%
+  plot_ly(labels = ~TERRITORY,
+          values = ~count,
+          marker = list(colors = mycolors)) %>%
+  add_pie(hole = 0.5) %>%
+  layout(xaxis = list(zeroline = F,
+                      showline = F,
+                      showticklabels = F,
+                      showgrid = F),
+         yaxis = list(zeroline = F,
+                      showline = F,
+                      showticklabels = F,
+                      showgrid = F))
+p4
+
+```
+
+Row
+-------------------------------
+### Sales by Country
+```{r}
+p5 <- data %>%
+  group_by(COUNTRY) %>%
+  summarise(count = n()) %>%
+  arrange(desc(count)) %>%  # Sort the data frame by count in descending order
+  plot_ly(x = ~count,  # Update y to x
+          y = ~reorder(COUNTRY, count),  # Use reorder to order COUNTRY based on count
+          type = 'bar',  # Update chart type to 'bar'
+          marker = list(color = 'blue', orientation = 'h')) %>%  # Specify orientation as 'h' for horizontal bars
+  layout(xaxis = list(title = 'Count'),  # Update yaxis to xaxis
+         yaxis = list(title = ""))  # Update xaxis to yaxis
+p5
+
+```
+### orders Trend 
+```{r}
+# Load lubridate package
+library(lubridate)
+data2<-read.csv('time.csv')
+# Convert Date column to Date format
+data2$Date <- mdy(data2$Date) # Assumes the original date format is month/day/year
+
+# Extract month and year from Date column
+data2$Month <- month(data2$Date)
+data2$Year <- year(data2$Date)
+
+# Create new variable with month and year format
+data2$MonthYear <- paste(month.abb[data2$Month], data2$Year)
+
+# Convert MonthYear column to factor with desired order
+data2$MonthYear <- factor(data2$MonthYear, levels = unique(data2$MonthYear))
+
+# Plot with month and year format on x-axis
+ggplot(data2, aes(x = MonthYear, y = data2$Number.of.Orders)) +
+  geom_line(color = "blue", size = 1) +
+  geom_point(color = "blue", size = 3) +
+  labs(title = "Orders Across Time",
+       x = "Month and Year",
+       y = "Orders") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) # Rotate x-axis labels if needed
+
+
+
+```
+
+Sales Page 
+==============================================
+Row
+-----------------------------------------------------------------------
+
+### Total Sales 
+```{r}
+MillionForm <- dollar_format(prefix = "$",suffix="M")
+valueBox(MillionForm((sum(data$SALE))/1000000),
+        icon = "fa-money",
+        color='white')
+```
+
+### % of Sales that were Larger
+```{r}
+large<-sum(data$SALES[data$DEALSIZE=='Large'])
+totalsales=sum(data$SALES)
+percentage=((large/totalsales))
+gauge((scales::percent(percentage)),
+            min = 0,
+            max = 100,
+            gaugeSectors(success = c(60, 100),
+                         warning = c(59, 15),
+                         danger = c(0, 14),
+                         colors = c("green", "yellow", "red")))
+            
+            
+```
+
+### % of Sales that were Small
+```{r}
+small<-sum(data$SALES[data$DEALSIZE=='Small'])
+totalsales=sum(data$SALES)
+percentage=((small/totalsales))
+gauge((scales::percent(percentage)),
+            min = 0,
+            max = 100,
+            gaugeSectors(success = c(60, 100),
+                         warning = c(59, 15),
+                         danger = c(0, 14),
+                         colors = c("green", "darkorange", "red")))
+            
+```
+
+
+
+### % of Sales that were Small
+```{r}
+Medium<-sum(data$SALES[data$DEALSIZE=='Medium'])
+totalsales=sum(data$SALES)
+percentage=((Medium/totalsales))
+gauge((scales::percent(percentage)),
+            min = 0,
+            max = 100,
+            gaugeSectors(success = c(60, 100),
+                         warning = c(59, 15),
+                         danger = c(0, 14),
+                         colors = c("green", "yellow", "red")))
+            
+```
+Row
+-----------------------------------------------
+### Sales Accross Time
+```{r}
+p7 <- data2 %>%
+         group_by(data2$MonthYear) %>%
+         
+         plot_ly(x = ~data2$MonthYear,
+                 y = ~Sales,
+                 type = 'bar',
+                 marker = list(color = 'blue')) %>%
+         layout(xaxis = list(title = ""),
+                yaxis = list(title = 'Count'))
+p7
+```
+### Sales by Territoty
+```{r}
+p8 <- data %>%
+  filter(!is.na(TERRITORY)) %>%
+  group_by(TERRITORY) %>%
+  summarise(sum = sum(data$SALES)) %>%
+  filter(sum > 50) %>%
+  plot_ly(labels = ~TERRITORY,
+          values = ~sum,
+          marker = list(colors = mycolors)) %>%
+  add_pie(hole = 0.5) %>%
+  layout(xaxis = list(zeroline = F,
+                      showline = F,
+                      showticklabels = F,
+                      showgrid = F),
+         yaxis = list(zeroline = F,
+                      showline = F,
+                      showticklabels = F,
+                      showgrid = F))
+p8
+
+```
+### Sales by Year
+```{r}
+p9 <- data %>%
+         group_by(YEAR_ID) %>%
+         plot_ly(x = ~YEAR_ID,
+                 y = ~data$SALES,
+                 type = 'bar',
+                 marker = list(color = 'blue')) %>%
+         layout(xaxis = list(title = ""),
+                yaxis = list(title = 'Count'))
+p9
+
+```
+###  Sales by STATUS
+```{r}
+p10 <- data %>%
+         group_by(STATUS) %>%
+         filter(SALES>10000) %>%
+         plot_ly(labels = ~STATUS,
+                 values = ~SALES,
+                 marker = list(colors = mycolors)) %>%
+         add_pie(hole = 0.5) %>%
+         layout(xaxis = list(zeroline = F,
+                             showline = F,
+                             showticklabels = F,
+                             showgrid = F),
+                yaxis = list(zeroline = F,
+                             showline = F,
+                             showticklabels=F,
+                            showgrid=F))
+p10 
+```
+
+
+Row
+---------------------------
+### Sales Dist by Product Line
+```{r}
+p11 <- data %>%
+  group_by(PRODUCTLINE) %>%
+  plot_ly(
+    x = ~data$SALES,
+    y = ~reorder(PRODUCTLINE, data$SALES), # Sort by data$SALES in descending order
+    type = 'bar',
+    marker = list(color = 'blue')
+  ) %>%
+  layout(
+    xaxis = list(title = "Total Sales"),
+    yaxis = list(title = '')
+  )
+
+p11
+
+```
+### Sales by Country 
+```{r}
+p12 <- data %>%
+  group_by(COUNTRY) %>%
+  plot_ly(
+    y = ~data$SALES,
+    x = ~ COUNTRY, # Sort by data$SALES in descending order
+    type = 'bar',
+    marker = list(color = 'blue')
+  ) %>%
+  layout(
+    xaxis = list(title = "Total Sales"),
+    yaxis = list(title = '')
+  )
+
+p12
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
